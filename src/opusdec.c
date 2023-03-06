@@ -463,6 +463,7 @@ void usage(void)
    printf(" --force-wav           Force Wave header on output\n");
    printf(" --packet-loss n       Simulate n %% random packet loss\n");
    printf(" --save-range file     Save check values for every frame to a file\n");
+   printf(" -s, --seek seconds    Seek within the stream before decoding\n");
 }
 
 void version(void)
@@ -682,6 +683,7 @@ int main(int argc, char **argv)
    ogg_int64_t nb_read_total=0;
    ogg_int64_t link_read=0;
    ogg_int64_t link_out=0;
+   double seek=0.0;
    struct option long_options[] =
    {
       {"help", no_argument, NULL, 0},
@@ -696,6 +698,7 @@ int main(int argc, char **argv)
       {"force-wav", no_argument, NULL, 0},
       {"packet-loss", required_argument, NULL, 0},
       {"save-range", required_argument, NULL, 0},
+      {"seek", required_argument, NULL, 0},
       {0, 0, 0, 0}
    };
    opus_int64 audio_size=0;
@@ -734,7 +737,7 @@ int main(int argc, char **argv)
    /*Process options*/
    while (1)
    {
-      c = getopt_long(argc_utf8, argv_utf8, "hV",
+      c = getopt_long(argc_utf8, argv_utf8, "hVs:",
                        long_options, &option_index);
       if (c==-1)
          break;
@@ -781,6 +784,9 @@ int main(int argc, char **argv)
          } else if (strcmp(long_options[option_index].name,"packet-loss")==0)
          {
             loss_percent = atof(optarg);
+         } else if (strcmp(long_options[option_index].name,"seek")==0)
+         {
+            seek = atof(optarg);
          }
          break;
       case 'h':
@@ -789,6 +795,9 @@ int main(int argc, char **argv)
       case 'V':
          version();
          goto done;
+      case 's':
+         seek = atof(optarg);
+         break;
       case '?':
          usage();
          exit_code=1;
@@ -997,6 +1006,14 @@ int main(int argc, char **argv)
       cb_ctx.loss_percent=loss_percent;
       cb_ctx.frange=frange;
       op_set_decode_callback(st, (op_decode_cb_func)decode_cb, &cb_ctx);
+   }
+
+   if (seek > 0.0) {
+      if (op_pcm_seek(st, seek*48000) != 0)
+      {
+         seek = 0.0;
+      }
+      fprintf(stderr, "time: %g\n", seek);
    }
 
    /*Main decoding loop*/
