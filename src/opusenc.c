@@ -117,20 +117,12 @@ static void opustoolsversion_short(const char *opusversion)
 
 static void usage(void)
 {
-  printf("Usage: opusenc [options] input_file output_file.opus\n");
-  printf("\n");
-  printf("Encode audio using Opus.\n");
+  printf("Usage: opusenc [options]\n");
 #if defined(HAVE_LIBFLAC)
   printf("The input format can be Wave, AIFF, FLAC, Ogg/FLAC, or raw PCM.\n");
 #else
   printf("The input format can be Wave, AIFF, or raw PCM.\n");
 #endif
-  printf("\ninput_file can be:\n");
-  printf("  filename.wav      file\n");
-  printf("  -                 stdin\n");
-  printf("\noutput_file can be:\n");
-  printf("  filename.opus     compressed file\n");
-  printf("  -                 stdout\n");
   printf("\nGeneral options:\n");
   printf(" -h, --help         Show this help\n");
   printf(" -V, --version      Show version information\n");
@@ -431,7 +423,7 @@ int main(int argc, char **argv)
   time_t             last_spin=0;
   int                last_spin_len=0;
   /*Settings*/
-  int                quiet=0;
+  int                quiet=1;
   opus_int32         bitrate=-1;
   opus_int32         rate=48000;
   opus_int32         frame_size=960;
@@ -474,12 +466,12 @@ int main(int argc, char **argv)
   in_format=NULL;
   inopt.channels=chan;
   inopt.channels_format=CHANNELS_FORMAT_DEFAULT;
-  inopt.rate=rate;
+  inopt.rate=44100;
   /* 0 dB gain is recommended unless you know what you're doing */
   inopt.gain=0;
   inopt.samplesize=16;
   inopt.endianness=0;
-  inopt.rawmode=0;
+  inopt.rawmode=1;
   inopt.rawmode_f=0;
   inopt.ignorelength=0;
   inopt.copy_comments=1;
@@ -827,12 +819,8 @@ int main(int argc, char **argv)
     fatal("Invalid bit-depth:\n"
       "--raw-bits must be 32 for float sample format\n");
   }
-  if (argc_utf8-optind!=2) {
-    usage();
-    exit(1);
-  }
-  inFile=argv_utf8[optind];
-  outFile=argv_utf8[optind+1];
+  inFile="-";
+  outFile="-";
 
   if (cline_size > 0) {
     ret = ope_comments_add(inopt.comments, "ENCODER_OPTIONS", ENCODER_string);

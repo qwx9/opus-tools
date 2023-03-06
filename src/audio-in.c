@@ -669,8 +669,8 @@ int wav_open(FILE *in, oe_enc_opt *opt, unsigned char *oldbuf, int buflen)
                this length so that we do not misinterpret any additional
                chunks after this as audio.  Also use this length to report
                percent progress. */
-            wav->totalsamples = opt->total_samples_per_channel =
-                len/(format.channels*samplesize);
+            wav->totalsamples = len/(format.channels*samplesize);
+            opt->total_samples_per_channel = wav->totalsamples;
         }
         else
         {
