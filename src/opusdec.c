@@ -503,8 +503,12 @@ opus_int64 audio_write(float *pcm, int channels, int frame_size, FILE *fout,
    short *out;
    float *buf;
    float *output;
-   out=alloca(sizeof(short)*MAX_FRAME_SIZE*channels);
-   buf=alloca(sizeof(float)*MAX_FRAME_SIZE*channels);
+   out=malloc(sizeof(short)*MAX_FRAME_SIZE*channels);
+   buf=malloc(sizeof(float)*MAX_FRAME_SIZE*channels);
+   if(out == NULL || buf == NULL){
+      fprintf(stderr, "allocation failure\n");
+      return 0;
+   }
    maxout=((link_read/48000)*rate + (link_read%48000)*rate/48000) - link_out;
    maxout=maxout<0?0:maxout;
    do {
@@ -570,6 +574,8 @@ opus_int64 audio_write(float *pcm, int channels, int frame_size, FILE *fout,
        maxout-=ret;
      }
    } while (frame_size>0 && maxout>0);
+   free(buf);
+   free(out);
    return sampout;
 }
 
@@ -857,8 +863,8 @@ int main(int argc, char **argv)
    }
    else
    {
-      st=op_open_url(inFile,NULL,NULL);
-      if (st==NULL)
+      //st=op_open_url(inFile,NULL,NULL);
+      //if (st==NULL)
       {
          st=op_open_file(inFile,NULL);
       }
@@ -1066,7 +1072,8 @@ int main(int argc, char **argv)
             resampler=NULL;
          }
          /*We've encountered a new link.*/
-         link_read=link_out=0;
+         link_read=0;
+         link_out=0;
          head=op_head(st, li);
          if (!force_stereo && channels!=head->channel_count)
          {
