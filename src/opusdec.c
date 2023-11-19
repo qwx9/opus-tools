@@ -445,27 +445,13 @@ void usage(void)
     defined HAVE_SYS_AUDIOIO_H || defined WIN32 || defined _WIN32
    printf("Usage: opusdec [options] input [output]\n");
 #else
-   printf("Usage: opusdec [options] input output\n");
+   printf("Usage: opusdec [options]\n");
 #endif
-   printf("\n");
-   printf("Decode audio in Opus format to Wave or raw PCM\n");
-   printf("\n");
-   printf("input can be:\n");
-   printf("  file:filename.opus   Opus URL\n");
-   printf("  filename.opus        Opus file\n");
-   printf("  -                    stdin\n");
-   printf("\n");
-   printf("output can be:\n");
-   printf("  filename.wav         Wave file\n");
-   printf("  filename.*           Raw PCM file (any extension other than .wav)\n");
-   printf("  -                    stdout (raw; unless --force-wav)\n");
 #if defined HAVE_LIBSNDIO || defined HAVE_SYS_SOUNDCARD_H || \
     defined HAVE_MACHINE_SOUNDCARD_H || defined HAVE_SOUNDCARD_H || \
     defined HAVE_SYS_AUDIOIO_H || defined WIN32 || defined _WIN32
    printf("  (default)            Play audio\n");
 #endif
-   printf("\n");
-   printf("Options:\n");
    printf(" -h, --help            Show this help\n");
    printf(" -V, --version         Show version information\n");
    printf(" --quiet               Suppress program output\n");
@@ -477,7 +463,7 @@ void usage(void)
    printf(" --force-wav           Force Wave header on output\n");
    printf(" --packet-loss n       Simulate n %% random packet loss\n");
    printf(" --save-range file     Save check values for every frame to a file\n");
-   printf("\n");
+   printf(" -s, --seek seconds    Seek within the stream before decoding\n");
 }
 
 void version(void)
@@ -503,8 +489,12 @@ opus_int64 audio_write(float *pcm, int channels, int frame_size, FILE *fout,
    short *out;
    float *buf;
    float *output;
-   out=alloca(sizeof(short)*MAX_FRAME_SIZE*channels);
-   buf=alloca(sizeof(float)*MAX_FRAME_SIZE*channels);
+   out=malloc(sizeof(short)*MAX_FRAME_SIZE*channels);
+   buf=malloc(sizeof(float)*MAX_FRAME_SIZE*channels);
+   if(out == NULL || buf == NULL){
+      fprintf(stderr, "allocation failure\n");
+      return 0;
+   }
    maxout=((link_read/48000)*rate + (link_read%48000)*rate/48000) - link_out;
    maxout=maxout<0?0:maxout;
    do {
@@ -570,6 +560,8 @@ opus_int64 audio_write(float *pcm, int channels, int frame_size, FILE *fout,
        maxout-=ret;
      }
    } while (frame_size>0 && maxout>0);
+   free(buf);
+   free(out);
    return sampout;
 }
 
@@ -686,11 +678,12 @@ int main(int argc, char **argv)
    int file_output;
    int old_li=-1;
    int li;
-   int quiet = 0;
+   int quiet = 1;
    int forcewav = 0;
    ogg_int64_t nb_read_total=0;
    ogg_int64_t link_read=0;
    ogg_int64_t link_out=0;
+   double seek=0.0;
    struct option long_options[] =
    {
       {"help", no_argument, NULL, 0},
@@ -705,6 +698,7 @@ int main(int argc, char **argv)
       {"force-wav", no_argument, NULL, 0},
       {"packet-loss", required_argument, NULL, 0},
       {"save-range", required_argument, NULL, 0},
+      {"seek", required_argument, NULL, 0},
       {0, 0, 0, 0}
    };
    opus_int64 audio_size=0;
@@ -712,10 +706,10 @@ int main(int argc, char **argv)
    float loss_percent=-1;
    float manual_gain=0;
    int force_rate=0;
-   int force_stereo=0;
+   int force_stereo=1;
    int requested_channels=-1;
    int channels=-1;
-   int rate=0;
+   int rate=44100;
    int wav_format=0;
    int dither=1;
    int fp=0;
@@ -743,7 +737,7 @@ int main(int argc, char **argv)
    /*Process options*/
    while (1)
    {
-      c = getopt_long(argc_utf8, argv_utf8, "hV",
+      c = getopt_long(argc_utf8, argv_utf8, "hVs:",
                        long_options, &option_index);
       if (c==-1)
          break;
@@ -790,6 +784,9 @@ int main(int argc, char **argv)
          } else if (strcmp(long_options[option_index].name,"packet-loss")==0)
          {
             loss_percent = atof(optarg);
+         } else if (strcmp(long_options[option_index].name,"seek")==0)
+         {
+            seek = atof(optarg);
          }
          break;
       case 'h':
@@ -798,19 +795,16 @@ int main(int argc, char **argv)
       case 'V':
          version();
          goto done;
+      case 's':
+         seek = atof(optarg);
+         break;
       case '?':
          usage();
          exit_code=1;
          goto done;
       }
    }
-   if (argc_utf8-optind!=2 && argc_utf8-optind!=1)
-   {
-      usage();
-      exit_code=1;
-      goto done;
-   }
-   inFile=argv_utf8[optind];
+   inFile="-";
 
    /*Output to a file or playback?*/
    file_output=argc_utf8-optind==2;
@@ -827,7 +821,7 @@ int main(int argc, char **argv)
      }
      wav_format|=forcewav;
    } else {
-     outFile=NULL;
+     outFile="-";
      wav_format=0;
      /*If playing to audio out, default the rate to 48000
        instead of the original rate. The original rate is
@@ -857,8 +851,8 @@ int main(int argc, char **argv)
    }
    else
    {
-      st=op_open_url(inFile,NULL,NULL);
-      if (st==NULL)
+      //st=op_open_url(inFile,NULL,NULL);
+      //if (st==NULL)
       {
          st=op_open_file(inFile,NULL);
       }
@@ -1014,6 +1008,14 @@ int main(int argc, char **argv)
       op_set_decode_callback(st, (op_decode_cb_func)decode_cb, &cb_ctx);
    }
 
+   if (seek > 0.0) {
+      if (op_pcm_seek(st, seek*48000) != 0)
+      {
+         seek = 0.0;
+      }
+      fprintf(stderr, "time: %g\n", seek);
+   }
+
    /*Main decoding loop*/
    while (1)
    {
@@ -1066,7 +1068,8 @@ int main(int argc, char **argv)
             resampler=NULL;
          }
          /*We've encountered a new link.*/
-         link_read=link_out=0;
+         link_read=0;
+         link_out=0;
          head=op_head(st, li);
          if (!force_stereo && channels!=head->channel_count)
          {

@@ -669,8 +669,8 @@ int wav_open(FILE *in, oe_enc_opt *opt, unsigned char *oldbuf, int buflen)
                this length so that we do not misinterpret any additional
                chunks after this as audio.  Also use this length to report
                percent progress. */
-            wav->totalsamples = opt->total_samples_per_channel =
-                len/(format.channels*samplesize);
+            wav->totalsamples = len/(format.channels*samplesize);
+            opt->total_samples_per_channel = wav->totalsamples;
         }
         else
         {
@@ -719,7 +719,11 @@ long wav_read(void *in, float *buffer, int samples)
     int sampbyte = f->samplesize / 8;
     int realsamples = f->totalsamples > 0 && samples > (f->totalsamples - f->samplesread)
         ? (int)(f->totalsamples - f->samplesread) : samples;
-    signed char *buf = alloca(realsamples*sampbyte*f->channels);
+    signed char *buf = malloc(realsamples*sampbyte*f->channels);
+    if(buf == NULL){
+        fprintf(stderr, "allocation failure\n");
+        return 0;
+    }
     int i,j;
     int *ch_permute = f->channel_permute;
 
@@ -807,9 +811,11 @@ long wav_read(void *in, float *buffer, int samples)
     else {
         fprintf(stderr, _("Internal error: attempt to read unsupported "
                           "bitdepth %d\n"), f->samplesize);
+        free(buf);
         return 0;
     }
 
+    free(buf);
     return realsamples;
 }
 
@@ -818,8 +824,13 @@ long wav_ieee_read(void *in, float *buffer, int samples)
     wavfile *f = (wavfile *)in;
     int realsamples = f->totalsamples > 0 && samples > (f->totalsamples - f->samplesread)
         ? (int)(f->totalsamples - f->samplesread) : samples;
-    float *buf = alloca(realsamples*4*f->channels); /* de-interleave buffer */
+    float *buf = malloc(realsamples*4*f->channels); /* de-interleave buffer */
     int i,j;
+
+    if(buf == NULL){
+        fprintf(stderr, "allocation failure\n");
+        return 0;
+    }
 
     realsamples = (int)fread(buf, 4*f->channels, realsamples, f->f);
     f->samplesread += realsamples;
@@ -837,6 +848,7 @@ long wav_ieee_read(void *in, float *buffer, int samples)
                     get_be_float(buf + i*f->channels + f->channel_permute[j]);
     }
 
+    free(buf);
     return realsamples;
 }
 
